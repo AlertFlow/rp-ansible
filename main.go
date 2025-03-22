@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/rpc"
 	"time"
 
+	"github.com/apenella/go-ansible/v2/pkg/playbook"
 	"github.com/v1Flows/runner/pkg/executions"
 	"github.com/v1Flows/runner/pkg/plugins"
-
 	"github.com/v1Flows/shared-library/pkg/models"
 
 	"github.com/hashicorp/go-plugin"
@@ -17,23 +18,52 @@ import (
 type Plugin struct{}
 
 func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Response, error) {
-	param1 := ""
+	play := ""
+	inventory := ""
+	become := false
+	limit := ""
+	check := false
+	diff := false
+	user := ""
+	becomeUser := ""
 
 	// access action params
 	for _, param := range request.Step.Action.Params {
-		if param.Key == "Param1" {
-			param1 = param.Value
+		if param.Key == "playbook" {
+			play = param.Value
+		}
+		if param.Key == "inventory" {
+			inventory = param.Value
+		}
+		if param.Key == "become" {
+			become = param.Value == "true"
+		}
+		if param.Key == "limit" {
+			limit = param.Value
+		}
+		if param.Key == "check" {
+			check = param.Value == "true"
+		}
+		if param.Key == "diff" {
+			diff = param.Value == "true"
+		}
+		if param.Key == "user" {
+			user = param.Value
+		}
+		if param.Key == "become_user" {
+			becomeUser = param.Value
 		}
 	}
 
-	// update the step with the messages
 	err := executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
 		ID: request.Step.ID,
 		Messages: []models.Message{
 			{
-				Title: "Templated",
+				Title: "Ansible Playbook",
 				Lines: []string{
-					"Starting template action",
+					"Starting Ansible Playbook",
+					"Playbook: " + play,
+					"Inventory: " + inventory,
 				},
 			},
 		},
@@ -46,17 +76,55 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}, err
 	}
 
+	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
+		Connection: "local",
+		Inventory:  inventory,
+		Become:     become,
+		Limit:      limit,
+		Check:      check,
+		Diff:       diff,
+		User:       user,
+		BecomeUser: becomeUser,
+	}
+
+	err = playbook.NewAnsiblePlaybookExecute(play).
+		WithPlaybookOptions(ansiblePlaybookOptions).
+		Execute(context.TODO())
+
+	if err != nil {
+		err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
+			ID: request.Step.ID,
+			Messages: []models.Message{
+				{
+					Title: "Ansible Playbook",
+					Lines: []string{
+						"Ansible Playbook failed",
+						err.Error(),
+					},
+				},
+			},
+			Status:     "error",
+			StartedAt:  time.Now(),
+			FinishedAt: time.Now(),
+		}, request.Platform)
+		if err != nil {
+			return plugins.Response{
+				Success: false,
+			}, err
+		}
+		return plugins.Response{
+			Success: false,
+		}, err
+	}
+
 	// update the step with the messages
 	err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
 		ID: request.Step.ID,
 		Messages: []models.Message{
 			{
-				Title: "Templated",
+				Title: "Ansible Playbook",
 				Lines: []string{
-					"Execution ID: " + request.Execution.ID.String(),
-					"Step ID: " + request.Step.ID.String(),
-					param1,
-					"Template Action finished",
+					"Ansible Playbook executed successfully",
 				},
 			},
 		},
@@ -83,23 +151,88 @@ func (p *Plugin) EndpointRequest(request plugins.EndpointRequest) (plugins.Respo
 
 func (p *Plugin) Info(request plugins.InfoRequest) (models.Plugin, error) {
 	var plugin = models.Plugin{
-		Name:    "Template",
+		Name:    "Ansible",
 		Type:    "action",
 		Version: "1.0.0",
 		Author:  "JustNZ",
 		Action: models.Action{
-			Name:        "Template",
-			Description: "Template description",
-			Plugin:      "template",
-			Icon:        "solar:clipboard-list-broken",
-			Category:    "Template",
+			Name:        "Ansible",
+			Description: "Execute Ansible Playbook",
+			Plugin:      "ansible",
+			Icon:        "mdi:ansible",
+			Category:    "Automation",
 			Params: []models.Params{
 				{
-					Key:         "Param1",
+					Key:         "playbook",
+					Title:       "Playbook",
+					Category:    "General",
+					Type:        "text",
+					Default:     "",
+					Required:    true,
+					Description: "Path to the playbook file",
+				},
+				{
+					Key:         "inventory",
+					Title:       "Inventory",
+					Category:    "General",
+					Type:        "text",
+					Default:     "",
+					Required:    true,
+					Description: "Path to the inventory file or comma separated host list",
+				},
+				{
+					Key:         "become",
+					Title:       "Become",
+					Category:    "General",
+					Type:        "boolean",
+					Default:     "false",
+					Required:    false,
+					Description: "Run playbook with become",
+				},
+				{
+					Key:         "limit",
+					Title:       "Limit",
+					Category:    "General",
 					Type:        "text",
 					Default:     "",
 					Required:    false,
-					Description: "Param1 description",
+					Description: "Further limit selected hosts to an additional pattern",
+				},
+				{
+					Key:         "check",
+					Title:       "Check",
+					Category:    "General",
+					Type:        "boolean",
+					Default:     "false",
+					Required:    false,
+					Description: "Don't make any changes; instead, try to predict some of the changes that may occur",
+				},
+				{
+					Key:         "diff",
+					Title:       "Diff",
+					Category:    "General",
+					Type:        "boolean",
+					Default:     "false",
+					Required:    false,
+					Description: "When changing (small) files and templates, show the differences in those files",
+				},
+				{
+					Key:         "user",
+					Title:       "User",
+					Category:    "General",
+					Type:        "text",
+					Default:     "",
+					Required:    false,
+					Description: "Connect as this user",
+				},
+				{
+					Key:         "become_user",
+					Title:       "Become User",
+					Category:    "General",
+					Type:        "text",
+					Default:     "root",
+					Required:    false,
+					Description: "Run become tasks as this user",
 				},
 			},
 		},
