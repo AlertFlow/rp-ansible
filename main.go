@@ -194,33 +194,31 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 
 	for _, play := range res.Plays {
 		for _, task := range play.Tasks {
-			if task.Task.Name == "ansibleplaybook-walk-through-json-output" {
-				for _, content := range task.Hosts {
+			for _, content := range task.Hosts {
 
-					err = json.Unmarshal([]byte(fmt.Sprint(content.Stdout)), &msgOutput)
-					if err != nil {
-						panic(err)
-					}
+				err = json.Unmarshal([]byte(fmt.Sprint(content.Stdout)), &msgOutput)
+				if err != nil {
+					panic(err)
+				}
 
-					err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
-						ID: request.Step.ID,
-						Messages: []models.Message{
-							{
-								Title: "Ansible Playbook",
-								Lines: []string{
-									fmt.Sprintf("[%s] %s", msgOutput.Host, msgOutput.Message),
-								},
+				err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
+					ID: request.Step.ID,
+					Messages: []models.Message{
+						{
+							Title: "Ansible Playbook",
+							Lines: []string{
+								fmt.Sprintf("[%s] %s", msgOutput.Host, msgOutput.Message),
 							},
 						},
-						Status:     "error",
-						StartedAt:  time.Now(),
-						FinishedAt: time.Now(),
-					}, request.Platform)
-					if err != nil {
-						return plugins.Response{
-							Success: false,
-						}, err
-					}
+					},
+					Status:     "error",
+					StartedAt:  time.Now(),
+					FinishedAt: time.Now(),
+				}, request.Platform)
+				if err != nil {
+					return plugins.Response{
+						Success: false,
+					}, err
 				}
 			}
 		}
