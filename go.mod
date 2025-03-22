@@ -20,6 +20,7 @@ require (
 )
 
 require (
+	github.com/apenella/go-ansible v1.3.0
 	github.com/apenella/go-ansible/v2 v2.1.1
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
