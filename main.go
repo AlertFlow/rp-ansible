@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/rpc"
 	"os"
@@ -11,7 +13,6 @@ import (
 	"time"
 
 	"github.com/apenella/go-ansible/v2/pkg/execute"
-	"github.com/apenella/go-ansible/v2/pkg/execute/measure"
 	results "github.com/apenella/go-ansible/v2/pkg/execute/result/json"
 	"github.com/apenella/go-ansible/v2/pkg/execute/stdoutcallback"
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
@@ -172,8 +173,8 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		User:       user,
 		BecomeUser: becomeUser,
 		ExtraVars: map[string]interface{}{
-			"ansible_password":  password,
-			"ansible_sudo_pass": becomePass,
+			"ansible_password":    password,
+			"ansible_become_pass": becomePass,
 		},
 	}
 
@@ -182,13 +183,11 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		playbook.WithPlaybookOptions(ansiblePlaybookOptions),
 	)
 
-	exec := measure.NewExecutorTimeMeasurement(
-		stdoutcallback.NewJSONStdoutCallbackExecute(
-			execute.NewDefaultExecute(
-				execute.WithCmd(playbookCmd),
-				execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
-				execute.WithWrite(io.Writer(buff)),
-			),
+	exec := stdoutcallback.NewJSONStdoutCallbackExecute(
+		execute.NewDefaultExecute(
+			execute.WithCmd(playbookCmd),
+			execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
+			execute.WithWrite(io.Writer(buff)),
 		),
 	)
 
@@ -246,6 +245,62 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}, err
 	}
 
+	msgOutput := struct {
+		Host    string `json:"host"`
+		Message string `json:"message"`
+	}{}
+
+	for _, play := range res.Plays {
+		for _, task := range play.Tasks {
+			for _, content := range task.Hosts {
+
+				err = json.Unmarshal([]byte(fmt.Sprint(content.Stdout)), &msgOutput)
+				if err != nil {
+					err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
+						ID: request.Step.ID,
+						Messages: []models.Message{
+							{
+								Title: "Ansible Playbook",
+								Lines: []string{
+									"Ansible Playbook failed",
+									err.Error(),
+								},
+							},
+						},
+						Status:     "error",
+						StartedAt:  time.Now(),
+						FinishedAt: time.Now(),
+					}, request.Platform)
+					if err != nil {
+						return plugins.Response{
+							Success: false,
+						}, err
+					}
+					return plugins.Response{
+						Success: false,
+					}, err
+				}
+
+				err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
+					ID: request.Step.ID,
+					Messages: []models.Message{
+						{
+							Title: "Ansible Playbook",
+							Lines: []string{
+								fmt.Sprintf("[%s] %s", msgOutput.Host, msgOutput.Message),
+							},
+						},
+					},
+				}, request.Platform)
+				if err != nil {
+					return plugins.Response{
+						Success: false,
+					}, err
+				}
+			}
+		}
+	}
+
 	// update the step with the messages
 	err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
 		ID: request.Step.ID,
@@ -253,8 +308,6 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 			{
 				Title: "Ansible Playbook",
 				Lines: []string{
-					res.String(),
-					"Duration: " + exec.Duration().String(),
 					"Ansible Playbook executed successfully",
 				},
 			},
