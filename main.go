@@ -26,7 +26,9 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 	check := false
 	diff := false
 	user := ""
+	password := ""
 	becomeUser := ""
+	becomePass := ""
 
 	// access action params
 	for _, param := range request.Step.Action.Params {
@@ -60,8 +62,14 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		if param.Key == "user" {
 			user = param.Value
 		}
+		if param.Key == "password" {
+			password = param.Value
+		}
 		if param.Key == "become_user" {
 			becomeUser = param.Value
+		}
+		if param.Key == "become_pass" {
+			becomePass = param.Value
 		}
 	}
 
@@ -95,6 +103,10 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		Diff:       diff,
 		User:       user,
 		BecomeUser: becomeUser,
+		ExtraVars: map[string]interface{}{
+			"ansible_password":  password,
+			"ansible_sudo_pass": becomePass,
+		},
 	}
 
 	err = playbook.NewAnsiblePlaybookExecute(play).
