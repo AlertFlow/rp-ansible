@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/rpc"
+	"os"
 	"strings"
 	"time"
 
@@ -81,6 +82,22 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}
 		if param.Key == "become_pass" {
 			becomePass = param.Value
+		}
+	}
+
+	// check if playbook file exists
+	if _, err := os.Stat(play); errors.Is(err, os.ErrNotExist) {
+		return plugins.Response{
+			Success: false,
+		}, errors.New("playbook file does not exist")
+	}
+
+	// if inventory is a file check and not a comma separated list check if file exists
+	if !strings.Contains(inventory, ",") {
+		if _, err := os.Stat(inventory); errors.Is(err, os.ErrNotExist) {
+			return plugins.Response{
+				Success: false,
+			}, errors.New("inventory file does not exist")
 		}
 	}
 
