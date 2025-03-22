@@ -31,7 +31,11 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 	// access action params
 	for _, param := range request.Step.Action.Params {
 		if param.Key == "playbook" {
-			play = param.Value
+			if strings.Contains(param.Value, "/") {
+				play = request.Workspace + "/" + param.Value
+			} else {
+				play = param.Value
+			}
 		}
 		if param.Key == "inventory" {
 			// if inventory is a path prefix with workspace
