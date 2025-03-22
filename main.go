@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/rpc"
+	"strings"
 	"time"
 
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
@@ -33,7 +34,12 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 			play = param.Value
 		}
 		if param.Key == "inventory" {
-			inventory = param.Value
+			// if inventory is a path prefix with workspace
+			if strings.Contains(param.Value, "/") {
+				inventory = request.Workspace + "/" + param.Value
+			} else {
+				inventory = param.Value
+			}
 		}
 		if param.Key == "become" {
 			become = param.Value == "true"
