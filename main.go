@@ -133,6 +133,33 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}
 	}
 
+	err := executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
+		ID: request.Step.ID,
+		Messages: []models.Message{
+			{
+				Title: "Ansible Playbook",
+				Lines: []models.Line{
+					{
+						Content: "Starting Ansible Playbook",
+					},
+					{
+						Content: "Playbook: " + play,
+					},
+					{
+						Content: "Inventory: " + inventory,
+					},
+				},
+			},
+		},
+		Status:    "running",
+		StartedAt: time.Now(),
+	}, request.Platform)
+	if err != nil {
+		return plugins.Response{
+			Success: false,
+		}, err
+	}
+
 	// check if playbook file exists
 	if _, err := os.Stat(play); errors.Is(err, os.ErrNotExist) {
 		err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
@@ -201,35 +228,8 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}
 	}
 
-	err := executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
-		ID: request.Step.ID,
-		Messages: []models.Message{
-			{
-				Title: "Ansible Playbook",
-				Lines: []models.Line{
-					{
-						Content: "Starting Ansible Playbook",
-					},
-					{
-						Content: "Playbook: " + play,
-					},
-					{
-						Content: "Inventory: " + inventory,
-					},
-				},
-			},
-		},
-		Status:    "running",
-		StartedAt: time.Now(),
-	}, request.Platform)
-	if err != nil {
-		return plugins.Response{
-			Success: false,
-		}, err
-	}
-
 	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
-		Connection: "local",
+		Connection: "ssh",
 		Inventory:  inventory,
 		Become:     become,
 		Limit:      limit,
