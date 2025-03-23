@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"net"
 	"net/rpc"
 	"os"
 	"strings"
@@ -165,7 +166,7 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 	}
 
 	// if inventory is a file check and not a comma separated list check if file exists
-	if !strings.Contains(inventory, ",") {
+	if !strings.Contains(inventory, ",") && net.ParseIP(inventory) == nil {
 		if _, err := os.Stat(inventory); errors.Is(err, os.ErrNotExist) {
 			err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
 				ID: request.Step.ID,
