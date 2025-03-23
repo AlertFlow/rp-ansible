@@ -233,7 +233,6 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 			execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
 			execute.WithWrite(customWriter), // Redirect both stdout and stderr to custom writer.
 		),
-		configuration.WithAnsibleForceColor(),
 	)
 
 	err = exec.Execute(context.TODO())
