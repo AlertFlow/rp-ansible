@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/hashicorp/go-plugin v1.6.3
 	github.com/v1Flows/runner v1.0.1
-	github.com/v1Flows/shared-library v1.0.6
+	github.com/v1Flows/shared-library v1.0.7
 )
 
 require (
@@ -20,7 +20,6 @@ require (
 )
 
 require (
-	github.com/apenella/go-ansible v1.3.0
 	github.com/apenella/go-ansible/v2 v2.1.1
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect

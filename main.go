@@ -22,24 +22,49 @@ import (
 // Plugin is an implementation of the Plugin interface
 type Plugin struct{}
 
+// Map ANSI color codes to models.Line.Color values
+var ansiToLineColor = map[string]string{
+	"\033[31m": "error",   // Red
+	"\033[32m": "success", // Green
+	"\033[33m": "warning", // Yellow
+	"\033[0m":  "",        // Reset
+}
+
+// Function to strip ANSI color codes and map them to models.Line.Color
+func parseAnsiColor(output string) (string, string) {
+	for ansiCode, lineColor := range ansiToLineColor {
+		if strings.Contains(output, ansiCode) {
+			// Remove the ANSI code from the output
+			cleanOutput := strings.ReplaceAll(output, ansiCode, "")
+			cleanOutput = strings.ReplaceAll(cleanOutput, "\033[0m", "") // Remove reset code
+			return cleanOutput, lineColor
+		}
+	}
+	return output, "" // Default: no color
+}
+
 type CustomWriter struct {
-	OutputFunc func(string)
+	OutputFunc func(string, string)
 }
 
 func (cw *CustomWriter) Write(p []byte) (n int, err error) {
 	output := string(p)
-	cw.OutputFunc(output)
+	cleanOutput, color := parseAnsiColor(output)
+	cw.OutputFunc(cleanOutput, color)
 	return len(p), nil
 }
 
-func handleOutput(output string, request plugins.ExecuteTaskRequest) error {
+func handleOutput(output string, color string, request plugins.ExecuteTaskRequest) error {
 	err := executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
 		ID: request.Step.ID,
 		Messages: []models.Message{
 			{
 				Title: "Ansible Playbook",
-				Lines: []string{
-					output,
+				Lines: []models.Line{
+					{
+						Content: output,
+						Color:   color,
+					},
 				},
 			},
 		},
@@ -113,9 +138,15 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 			Messages: []models.Message{
 				{
 					Title: "Ansible Playbook",
-					Lines: []string{
-						"Playbook file does not exist",
-						err.Error(),
+					Lines: []models.Line{
+						{
+							Content: "Playbook file does not exist",
+							Color:   "error",
+						},
+						{
+							Content: err.Error(),
+							Color:   "error",
+						},
 					},
 				},
 			},
@@ -141,9 +172,15 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 				Messages: []models.Message{
 					{
 						Title: "Ansible Playbook",
-						Lines: []string{
-							"Inventory file does not exist",
-							err.Error(),
+						Lines: []models.Line{
+							{
+								Content: "Inventory file does not exist",
+								Color:   "error",
+							},
+							{
+								Content: err.Error(),
+								Color:   "error",
+							},
 						},
 					},
 				},
@@ -167,10 +204,16 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		Messages: []models.Message{
 			{
 				Title: "Ansible Playbook",
-				Lines: []string{
-					"Starting Ansible Playbook",
-					"Playbook: " + play,
-					"Inventory: " + inventory,
+				Lines: []models.Line{
+					{
+						Content: "Starting Ansible Playbook",
+					},
+					{
+						Content: "Playbook: " + play,
+					},
+					{
+						Content: "Inventory: " + inventory,
+					},
 				},
 			},
 		},
@@ -205,18 +248,23 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 
 	// Use a custom writer to capture output
 	customWriter := &CustomWriter{
-		OutputFunc: func(output string) {
-			// Wrap handleOutput to match the expected signature
-			err := handleOutput(output, request)
+		OutputFunc: func(output string, color string) {
+			err := handleOutput(output, color, request)
 			if err != nil {
 				_ = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
 					ID: request.Step.ID,
 					Messages: []models.Message{
 						{
 							Title: "Ansible Playbook",
-							Lines: []string{
-								"Ansible Playbook failed",
-								err.Error(),
+							Lines: []models.Line{
+								{
+									Content: "Ansible Playbook failed",
+									Color:   "error",
+								},
+								{
+									Content: err.Error(),
+									Color:   "error",
+								},
 							},
 						},
 					},
@@ -233,6 +281,7 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 			execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
 			execute.WithWrite(customWriter), // Redirect both stdout and stderr to custom writer.
 		),
+		configuration.WithAnsibleForceColor(),
 	)
 
 	err = exec.Execute(context.TODO())
@@ -242,9 +291,15 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 			Messages: []models.Message{
 				{
 					Title: "Ansible Playbook",
-					Lines: []string{
-						"Ansible Playbook failed",
-						err.Error(),
+					Lines: []models.Line{
+						{
+							Content: "Ansible Playbook failed",
+							Color:   "error",
+						},
+						{
+							Content: err.Error(),
+							Color:   "error",
+						},
 					},
 				},
 			},
@@ -268,8 +323,11 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		Messages: []models.Message{
 			{
 				Title: "Ansible Playbook",
-				Lines: []string{
-					"Ansible Playbook executed successfully",
+				Lines: []models.Line{
+					{
+						Content: "Ansible Playbook executed successfully",
+						Color:   "success",
+					},
 				},
 			},
 		},
