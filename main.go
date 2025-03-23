@@ -5,12 +5,11 @@ import (
 	"errors"
 	"net/rpc"
 	"os"
-	"os/signal"
 	"strings"
 	"time"
 
 	"github.com/apenella/go-ansible/v2/pkg/execute"
-	"github.com/apenella/go-ansible/v2/pkg/execute/stdoutcallback"
+	"github.com/apenella/go-ansible/v2/pkg/execute/configuration"
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
 
 	"github.com/v1Flows/runner/pkg/executions"
@@ -184,9 +183,6 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}, err
 	}
 
-	signalChan := make(chan os.Signal, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-
 	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
 		Connection: "local",
 		Inventory:  inventory,
@@ -231,27 +227,14 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		},
 	}
 
-	exec := stdoutcallback.NewJSONStdoutCallbackExecute(
+	exec := configuration.NewAnsibleWithConfigurationSettingsExecute(
 		execute.NewDefaultExecute(
 			execute.WithCmd(playbookCmd),
 			execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
-			execute.WithWrite(customWriter),
+			execute.WithWrite(customWriter), // Redirect both stdout and stderr to custom writer.
 		),
+		configuration.WithAnsibleForceColor(),
 	)
-
-	signal.Notify(signalChan, os.Interrupt)
-	defer func() {
-		signal.Stop(signalChan)
-		cancel()
-	}()
-
-	go func() {
-		select {
-		case <-signalChan:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
 	err = exec.Execute(context.TODO())
 	if err != nil {
