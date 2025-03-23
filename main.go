@@ -26,11 +26,13 @@ type Plugin struct{}
 
 // Map ANSI color codes to models.Line.Color values
 var ansiToLineColor = map[string]string{
-	"\033[0;31m": "danger",   // Red
-	"\033[0;32m": "success",  // Green
-	"\033[0;33m": "warning",  // Yellow
-	"\033[0;36m": "cyan-500", // Cyan
-	"\033[0;0m":  "",         // Reset
+	"\033[0;31m": "danger",     // Red
+	"\033[0;32m": "success",    // Green
+	"\033[0;33m": "warning",    // Yellow
+	"\033[0;34m": "primary",    // Blue
+	"\033[0;35m": "purple-500", // Purple
+	"\033[0;36m": "cyan-500",   // Cyan
+	"\033[0;0m":  "",           // Reset
 }
 
 // Function to strip ANSI color codes and map them to models.Line.Color
@@ -71,6 +73,7 @@ func handleOutput(output string, color string, request plugins.ExecuteTaskReques
 				},
 			},
 		},
+		Status: "running",
 	}, request.Platform)
 	if err != nil {
 		return err
