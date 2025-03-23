@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,6 +90,8 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 	password := ""
 	becomeUser := ""
 	becomePass := ""
+	verbose := 0
+	private_key := ""
 
 	// access action params
 	for _, param := range request.Step.Action.Params {
@@ -130,6 +133,12 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}
 		if param.Key == "become_pass" {
 			becomePass = param.Value
+		}
+		if param.Key == "verbose" {
+			verbose, _ = strconv.Atoi(param.Value)
+		}
+		if param.Key == "private_key" {
+			private_key = param.Value
 		}
 	}
 
@@ -229,18 +238,34 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 	}
 
 	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
-		Connection: "ssh",
-		Inventory:  inventory,
-		Become:     become,
-		Limit:      limit,
-		Check:      check,
-		Diff:       diff,
-		User:       user,
-		BecomeUser: becomeUser,
+		Connection:    "ssh",
+		Inventory:     inventory,
+		Become:        become,
+		Limit:         limit,
+		Check:         check,
+		Diff:          diff,
+		User:          user,
+		BecomeUser:    becomeUser,
+		SSHCommonArgs: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
 		ExtraVars: map[string]interface{}{
 			"ansible_password":    password,
 			"ansible_become_pass": becomePass,
 		},
+		PrivateKey: private_key,
+	}
+
+	if verbose == 1 {
+		ansiblePlaybookOptions.Verbose = true
+		ansiblePlaybookOptions.VerboseV = true
+	} else if verbose == 2 {
+		ansiblePlaybookOptions.Verbose = true
+		ansiblePlaybookOptions.VerboseVV = true
+	} else if verbose == 3 {
+		ansiblePlaybookOptions.Verbose = true
+		ansiblePlaybookOptions.VerboseVVV = true
+	} else if verbose == 4 {
+		ansiblePlaybookOptions.Verbose = true
+		ansiblePlaybookOptions.VerboseVVVV = true
 	}
 
 	playbookCmd := playbook.NewAnsiblePlaybookCmd(
@@ -403,6 +428,15 @@ func (p *Plugin) Info(request plugins.InfoRequest) (models.Plugin, error) {
 					Description: "Connection user password",
 				},
 				{
+					Key:         "private_key",
+					Title:       "Private Key",
+					Category:    "Authentication",
+					Type:        "text",
+					Default:     "",
+					Required:    false,
+					Description: "Path to the private key file",
+				},
+				{
 					Key:         "limit",
 					Title:       "Limit",
 					Category:    "General",
@@ -455,6 +489,15 @@ func (p *Plugin) Info(request plugins.InfoRequest) (models.Plugin, error) {
 					Default:     "false",
 					Required:    false,
 					Description: "When changing (small) files and templates, show the differences in those files",
+				},
+				{
+					Key:         "verbose",
+					Title:       "Verbose",
+					Category:    "Utility",
+					Type:        "number",
+					Default:     "0",
+					Required:    false,
+					Description: "Set the verbosity level. Default is 0",
 				},
 			},
 		},
