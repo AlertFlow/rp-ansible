@@ -28,6 +28,7 @@ var ansiToLineColor = map[string]string{
 	"\033[0;31m": "danger",  // Red
 	"\033[0;32m": "success", // Green
 	"\033[0;33m": "warning", // Yellow
+	"\033[0;36m": "cyan",    // Cyan
 	"\033[0;0m":  "",        // Reset
 }
 
