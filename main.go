@@ -22,7 +22,6 @@ import (
 	"github.com/v1Flows/shared-library/pkg/models"
 
 	"github.com/hashicorp/go-plugin"
-	log "github.com/sirupsen/logrus"
 )
 
 // Plugin is an implementation of the Plugin interface
@@ -207,16 +206,25 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 	}{}
 
 	for _, play := range res.Plays {
-		log.Info("play: ", play)
 		for _, task := range play.Tasks {
-			log.Info("task: ", task)
 			for _, content := range task.Hosts {
-				log.Info("content: ", content)
-
 				err = json.Unmarshal([]byte(fmt.Sprint(content.Stdout)), &msgOutput)
 				if err != nil {
 					panic(err)
 				}
+
+				_ = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
+					ID: request.Step.ID,
+					Messages: []models.Message{
+						{
+							Title: "Ansible Playbook",
+							Lines: []string{
+								"Host: " + msgOutput.Host,
+								msgOutput.Message,
+							},
+						},
+					},
+				}, request.Platform)
 
 				fmt.Printf("[%s] %s\n", msgOutput.Host, msgOutput.Message)
 			}
