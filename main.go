@@ -22,6 +22,7 @@ import (
 	"github.com/v1Flows/shared-library/pkg/models"
 
 	"github.com/hashicorp/go-plugin"
+	log "github.com/sirupsen/logrus"
 )
 
 // Plugin is an implementation of the Plugin interface
@@ -38,10 +39,6 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 	password := ""
 	becomeUser := ""
 	becomePass := ""
-
-	var res *results.AnsiblePlaybookJSONResults
-
-	buff := new(bytes.Buffer)
 
 	// access action params
 	for _, param := range request.Step.Action.Params {
@@ -163,6 +160,9 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}, err
 	}
 
+	var res *results.AnsiblePlaybookJSONResults
+	buff := new(bytes.Buffer)
+
 	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
 		Connection: "local",
 		Inventory:  inventory,
@@ -193,56 +193,12 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 
 	err = exec.Execute(context.TODO())
 	if err != nil {
-		err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
-			ID: request.Step.ID,
-			Messages: []models.Message{
-				{
-					Title: "Ansible Playbook",
-					Lines: []string{
-						"Ansible Playbook failed",
-						err.Error(),
-					},
-				},
-			},
-			Status:     "error",
-			StartedAt:  time.Now(),
-			FinishedAt: time.Now(),
-		}, request.Platform)
-		if err != nil {
-			return plugins.Response{
-				Success: false,
-			}, err
-		}
-		return plugins.Response{
-			Success: false,
-		}, err
+		fmt.Println(err.Error())
 	}
 
 	res, err = results.ParseJSONResultsStream(io.Reader(buff))
 	if err != nil {
-		err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
-			ID: request.Step.ID,
-			Messages: []models.Message{
-				{
-					Title: "Ansible Playbook",
-					Lines: []string{
-						"Ansible Playbook failed",
-						err.Error(),
-					},
-				},
-			},
-			Status:     "error",
-			StartedAt:  time.Now(),
-			FinishedAt: time.Now(),
-		}, request.Platform)
-		if err != nil {
-			return plugins.Response{
-				Success: false,
-			}, err
-		}
-		return plugins.Response{
-			Success: false,
-		}, err
+		panic(err)
 	}
 
 	msgOutput := struct {
@@ -251,52 +207,18 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 	}{}
 
 	for _, play := range res.Plays {
+		log.Info("play: ", play)
 		for _, task := range play.Tasks {
+			log.Info("task: ", task)
 			for _, content := range task.Hosts {
+				log.Info("content: ", content)
 
 				err = json.Unmarshal([]byte(fmt.Sprint(content.Stdout)), &msgOutput)
 				if err != nil {
-					err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
-						ID: request.Step.ID,
-						Messages: []models.Message{
-							{
-								Title: "Ansible Playbook",
-								Lines: []string{
-									"Ansible Playbook failed",
-									err.Error(),
-								},
-							},
-						},
-						Status:     "error",
-						StartedAt:  time.Now(),
-						FinishedAt: time.Now(),
-					}, request.Platform)
-					if err != nil {
-						return plugins.Response{
-							Success: false,
-						}, err
-					}
-					return plugins.Response{
-						Success: false,
-					}, err
+					panic(err)
 				}
 
-				err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
-					ID: request.Step.ID,
-					Messages: []models.Message{
-						{
-							Title: "Ansible Playbook",
-							Lines: []string{
-								fmt.Sprintf("[%s] %s", msgOutput.Host, msgOutput.Message),
-							},
-						},
-					},
-				}, request.Platform)
-				if err != nil {
-					return plugins.Response{
-						Success: false,
-					}, err
-				}
+				fmt.Printf("[%s] %s\n", msgOutput.Host, msgOutput.Message)
 			}
 		}
 	}
