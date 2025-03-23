@@ -210,7 +210,9 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 			for _, content := range task.Hosts {
 				err = json.Unmarshal([]byte(fmt.Sprint(content.Stdout)), &msgOutput)
 				if err != nil {
-					panic(err)
+					return plugins.Response{
+						Success: false,
+					}, err
 				}
 
 				_ = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
