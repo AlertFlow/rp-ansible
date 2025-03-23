@@ -24,7 +24,7 @@ type Plugin struct{}
 
 // Map ANSI color codes to models.Line.Color values
 var ansiToLineColor = map[string]string{
-	"\033[31m": "error",   // Red
+	"\033[31m": "danger",  // Red
 	"\033[32m": "success", // Green
 	"\033[33m": "warning", // Yellow
 	"\033[0m":  "",        // Reset
@@ -141,11 +141,11 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 					Lines: []models.Line{
 						{
 							Content: "Playbook file does not exist",
-							Color:   "error",
+							Color:   "danger",
 						},
 						{
 							Content: err.Error(),
-							Color:   "error",
+							Color:   "danger",
 						},
 					},
 				},
@@ -175,11 +175,11 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 						Lines: []models.Line{
 							{
 								Content: "Inventory file does not exist",
-								Color:   "error",
+								Color:   "danger",
 							},
 							{
 								Content: err.Error(),
-								Color:   "error",
+								Color:   "danger",
 							},
 						},
 					},
@@ -259,11 +259,11 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 							Lines: []models.Line{
 								{
 									Content: "Ansible Playbook failed",
-									Color:   "error",
+									Color:   "danger",
 								},
 								{
 									Content: err.Error(),
-									Color:   "error",
+									Color:   "danger",
 								},
 							},
 						},
@@ -294,11 +294,11 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 					Lines: []models.Line{
 						{
 							Content: "Ansible Playbook failed",
-							Color:   "error",
+							Color:   "danger",
 						},
 						{
 							Content: err.Error(),
-							Color:   "error",
+							Color:   "danger",
 						},
 					},
 				},
