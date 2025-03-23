@@ -24,10 +24,10 @@ type Plugin struct{}
 
 // Map ANSI color codes to models.Line.Color values
 var ansiToLineColor = map[string]string{
-	"\033[31m": "danger",  // Red
-	"\033[32m": "success", // Green
-	"\033[33m": "warning", // Yellow
-	"\033[0m":  "",        // Reset
+	"\033[0;31m": "danger",  // Red
+	"\033[0;32m": "success", // Green
+	"\033[0;33m": "warning", // Yellow
+	"\033[0;0m":  "",        // Reset
 }
 
 // Function to strip ANSI color codes and map them to models.Line.Color
