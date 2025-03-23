@@ -1,19 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/rpc"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
 	"github.com/apenella/go-ansible/v2/pkg/execute"
-	results "github.com/apenella/go-ansible/v2/pkg/execute/result/json"
 	"github.com/apenella/go-ansible/v2/pkg/execute/stdoutcallback"
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
 
@@ -26,6 +22,35 @@ import (
 
 // Plugin is an implementation of the Plugin interface
 type Plugin struct{}
+
+type CustomWriter struct {
+	OutputFunc func(string)
+}
+
+func (cw *CustomWriter) Write(p []byte) (n int, err error) {
+	output := string(p)
+	cw.OutputFunc(output)
+	return len(p), nil
+}
+
+func handleOutput(output string, request plugins.ExecuteTaskRequest) error {
+	err := executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
+		ID: request.Step.ID,
+		Messages: []models.Message{
+			{
+				Title: "Ansible Playbook",
+				Lines: []string{
+					output,
+				},
+			},
+		},
+	}, request.Platform)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Response, error) {
 	play := ""
@@ -159,8 +184,8 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		}, err
 	}
 
-	var res *results.AnsiblePlaybookJSONResults
-	buff := new(bytes.Buffer)
+	signalChan := make(chan os.Signal, 1)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
 		Connection: "local",
@@ -182,55 +207,77 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 		playbook.WithPlaybookOptions(ansiblePlaybookOptions),
 	)
 
-	exec := stdoutcallback.NewJSONStdoutCallbackExecute(
-		execute.NewDefaultExecute(
-			execute.WithCmd(playbookCmd),
-			execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
-			execute.WithWrite(io.Writer(buff)),
-		),
-	)
-
-	err = exec.Execute(context.TODO())
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-
-	res, err = results.ParseJSONResultsStream(io.Reader(buff))
-	if err != nil {
-		panic(err)
-	}
-
-	msgOutput := struct {
-		Host    string `json:"host"`
-		Message string `json:"message"`
-	}{}
-
-	for _, play := range res.Plays {
-		for _, task := range play.Tasks {
-			for _, content := range task.Hosts {
-				err = json.Unmarshal([]byte(fmt.Sprint(content.Stdout)), &msgOutput)
-				if err != nil {
-					return plugins.Response{
-						Success: false,
-					}, err
-				}
-
+	// Use a custom writer to capture output
+	customWriter := &CustomWriter{
+		OutputFunc: func(output string) {
+			// Wrap handleOutput to match the expected signature
+			err := handleOutput(output, request)
+			if err != nil {
 				_ = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
 					ID: request.Step.ID,
 					Messages: []models.Message{
 						{
 							Title: "Ansible Playbook",
 							Lines: []string{
-								"Host: " + msgOutput.Host,
-								msgOutput.Message,
+								"Ansible Playbook failed",
+								err.Error(),
 							},
 						},
 					},
+					Status:     "error",
+					FinishedAt: time.Now(),
 				}, request.Platform)
-
-				fmt.Printf("[%s] %s\n", msgOutput.Host, msgOutput.Message)
 			}
+		},
+	}
+
+	exec := stdoutcallback.NewJSONStdoutCallbackExecute(
+		execute.NewDefaultExecute(
+			execute.WithCmd(playbookCmd),
+			execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
+			execute.WithWrite(customWriter),
+		),
+	)
+
+	signal.Notify(signalChan, os.Interrupt)
+	defer func() {
+		signal.Stop(signalChan)
+		cancel()
+	}()
+
+	go func() {
+		select {
+		case <-signalChan:
+			cancel()
+		case <-ctx.Done():
 		}
+	}()
+
+	err = exec.Execute(context.TODO())
+	if err != nil {
+		err = executions.UpdateStep(request.Config, request.Execution.ID.String(), models.ExecutionSteps{
+			ID: request.Step.ID,
+			Messages: []models.Message{
+				{
+					Title: "Ansible Playbook",
+					Lines: []string{
+						"Ansible Playbook failed",
+						err.Error(),
+					},
+				},
+			},
+			Status:     "error",
+			FinishedAt: time.Now(),
+		}, request.Platform)
+		if err != nil {
+			return plugins.Response{
+				Success: false,
+			}, err
+		}
+
+		return plugins.Response{
+			Success: false,
+		}, err
 	}
 
 	// update the step with the messages
@@ -245,7 +292,6 @@ func (p *Plugin) ExecuteTask(request plugins.ExecuteTaskRequest) (plugins.Respon
 			},
 		},
 		Status:     "success",
-		StartedAt:  time.Now(),
 		FinishedAt: time.Now(),
 	}, request.Platform)
 	if err != nil {
